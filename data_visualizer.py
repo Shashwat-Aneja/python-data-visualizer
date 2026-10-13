@@ -15,17 +15,21 @@ def visualize_data(csv_file):
         
         # Plot the first numeric column
         column = numeric_cols[0]
-        print(f"📊 Visualizing column: {column}")
+        series = data[column].dropna()
+        if series.empty:
+            print(f"❌ Numeric column {column!r} contains no usable values.")
+            return
+        print(f"📊 Visualizing column: {column} ({len(series)} usable rows)")
 
         plt.figure()
-        data[column].plot(kind="bar")
+        series.plot(kind="bar")
         plt.title(f"Bar Chart of {column}")
         plt.xlabel("Index")
         plt.ylabel(column)
         plt.show()
 
         plt.figure()
-        data[column].plot(kind="line")
+        series.plot(kind="line")
         plt.title(f"Line Chart of {column}")
         plt.xlabel("Index")
         plt.ylabel(column)
