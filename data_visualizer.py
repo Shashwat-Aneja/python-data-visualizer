@@ -1,4 +1,6 @@
 import argparse
+import re
+from pathlib import Path
 
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -26,7 +28,7 @@ def select_numeric_series(data, column=None):
     raise ValueError("No numeric columns found to visualize.")
 
 
-def visualize_data(csv_file, column=None):
+def visualize_data(csv_file, column=None, output_dir=None):
     try:
         data = pd.read_csv(csv_file)
         print(f"Loaded {csv_file} successfully!")
@@ -35,13 +37,24 @@ def visualize_data(csv_file, column=None):
         selected_column, series = select_numeric_series(data, column)
         print(f"📊 Visualizing column: {selected_column} ({len(series)} usable rows)")
 
+        destination = None
+        safe_name = None
+        if output_dir is not None:
+            destination = Path(output_dir).expanduser()
+            destination.mkdir(parents=True, exist_ok=True)
+            safe_name = re.sub(r"[^A-Za-z0-9_-]+", "_", selected_column).strip("_") or "metric"
+
         plt.figure()
         series.plot(kind="bar")
         plt.title(f"Bar Chart of {selected_column}")
         plt.xlabel("Index")
         plt.ylabel(selected_column)
         plt.tight_layout()
-        plt.show()
+        if destination is None:
+            plt.show()
+        else:
+            plt.savefig(destination / f"{safe_name}_bar.png", dpi=150, bbox_inches="tight")
+            plt.close()
 
         plt.figure()
         series.plot(kind="line")
@@ -49,7 +62,11 @@ def visualize_data(csv_file, column=None):
         plt.xlabel("Index")
         plt.ylabel(selected_column)
         plt.tight_layout()
-        plt.show()
+        if destination is None:
+            plt.show()
+        else:
+            plt.savefig(destination / f"{safe_name}_line.png", dpi=150, bbox_inches="tight")
+            plt.close()
     except (OSError, pd.errors.ParserError, ValueError) as exc:
         print(f"Error processing file: {exc}")
 
@@ -58,8 +75,12 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description="Create bar and line charts from a CSV file.")
     parser.add_argument("csv_file", help="Path to the input CSV file")
     parser.add_argument("--column", help="Name of the numeric column to visualize")
+    parser.add_argument(
+        "--output-dir",
+        help="Save PNG charts to this directory instead of opening interactive windows",
+    )
     args = parser.parse_args(argv)
-    visualize_data(args.csv_file, column=args.column)
+    visualize_data(args.csv_file, column=args.column, output_dir=args.output_dir)
 
 
 if __name__ == "__main__":
