@@ -1,7 +1,7 @@
 import pandas as pd
 import pytest
 
-from data_visualizer import select_numeric_series
+from data_visualizer import select_numeric_series, visualize_data
 
 
 def test_explicit_numeric_column_is_selected_and_missing_rows_are_dropped():
@@ -41,3 +41,22 @@ def test_selection_rejects_empty_numeric_data():
 
     with pytest.raises(ValueError, match="no usable values"):
         select_numeric_series(frame, "value")
+
+
+def test_visualizer_saves_both_charts_without_opening_windows(tmp_path, monkeypatch, capsys):
+    csv_path = tmp_path / "sales.csv"
+    pd.DataFrame({"sales": [10, 20, 15]}).to_csv(csv_path, index=False)
+    output_dir = tmp_path / "nested" / "charts"
+
+    def fail_show():
+        raise AssertionError("headless chart export must not open a window")
+
+    monkeypatch.setattr("matplotlib.pyplot.show", fail_show)
+
+    visualize_data(csv_path, column="sales", output_dir=output_dir)
+
+    assert (output_dir / "sales_bar.png").is_file()
+    assert (output_dir / "sales_line.png").is_file()
+    assert (output_dir / "sales_bar.png").stat().st_size > 0
+    assert (output_dir / "sales_line.png").stat().st_size > 0
+    assert "Visualizing column: sales" in capsys.readouterr().out
