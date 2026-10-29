@@ -3,17 +3,19 @@ import re
 from pathlib import Path
 
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 
 
 def select_numeric_series(data, column=None):
-    """Choose a numeric column and return its non-missing observations."""
+    """Choose a numeric column and return finite, non-missing observations."""
     if column is not None:
         if column not in data.columns:
             raise ValueError(f"Column {column!r} was not found in the CSV.")
         if not pd.api.types.is_numeric_dtype(data[column]):
             raise ValueError(f"Column {column!r} is not numeric.")
         series = data[column].dropna()
+        series = series[np.isfinite(series.to_numpy(dtype=float))]
         if series.empty:
             raise ValueError(f"Numeric column {column!r} contains no usable values.")
         return column, series
@@ -21,6 +23,7 @@ def select_numeric_series(data, column=None):
     numeric_columns = data.select_dtypes(include=["number"]).columns
     for candidate in numeric_columns:
         series = data[candidate].dropna()
+        series = series[np.isfinite(series.to_numpy(dtype=float))]
         if not series.empty:
             return candidate, series
     if len(numeric_columns):
