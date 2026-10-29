@@ -28,6 +28,23 @@ def test_automatic_selection_skips_numeric_columns_without_values():
     assert series.tolist() == [4, 9]
 
 
+def test_numeric_selection_ignores_infinite_observations():
+    frame = pd.DataFrame(
+        {
+            "infinite_only": [np.inf, -np.inf],
+            "sales": [10.0, np.inf, None, 30.0],
+        }
+    )
+
+    column, series = select_numeric_series(frame, "sales")
+    assert column == "sales"
+    assert series.tolist() == [10.0, 30.0]
+
+    selected, automatic_series = select_numeric_series(frame)
+    assert selected == "sales"
+    assert automatic_series.tolist() == [10.0, 30.0]
+
+
 def test_explicit_selection_rejects_unknown_or_non_numeric_columns():
     frame = pd.DataFrame({"label": ["a", "b"], "value": [1, 2]})
 
