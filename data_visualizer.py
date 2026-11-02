@@ -8,27 +8,33 @@ import pandas as pd
 
 
 def select_numeric_series(data, column=None):
-    """Choose a numeric column and return finite, non-missing observations."""
+    """Choose a real-valued numeric column and return finite, non-missing observations."""
     if column is not None:
         if column not in data.columns:
             raise ValueError(f"Column {column!r} was not found in the CSV.")
-        if not pd.api.types.is_numeric_dtype(data[column]):
-            raise ValueError(f"Column {column!r} is not numeric.")
-        series = data[column].dropna()
+        selected = data[column]
+        if not pd.api.types.is_numeric_dtype(selected) or pd.api.types.is_complex_dtype(selected):
+            raise ValueError(f"Column {column!r} is not numeric or contains unsupported complex values.")
+        series = selected.dropna()
         series = series[np.isfinite(series.to_numpy(dtype=float))]
         if series.empty:
             raise ValueError(f"Numeric column {column!r} contains no usable values.")
         return column, series
 
-    numeric_columns = data.select_dtypes(include=["number"]).columns
+    numeric_columns = [
+        candidate
+        for candidate in data.columns
+        if pd.api.types.is_numeric_dtype(data[candidate])
+        and not pd.api.types.is_complex_dtype(data[candidate])
+    ]
     for candidate in numeric_columns:
         series = data[candidate].dropna()
         series = series[np.isfinite(series.to_numpy(dtype=float))]
         if not series.empty:
             return candidate, series
     if len(numeric_columns):
-        raise ValueError("Numeric columns contain no usable values.")
-    raise ValueError("No numeric columns found to visualize.")
+        raise ValueError("Real numeric columns contain no usable values.")
+    raise ValueError("No supported real numeric columns found to visualize.")
 
 
 def visualize_data(csv_file, column=None, output_dir=None):
