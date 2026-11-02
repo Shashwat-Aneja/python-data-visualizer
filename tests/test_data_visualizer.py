@@ -78,3 +78,24 @@ def test_visualizer_saves_both_charts_without_opening_windows(tmp_path, monkeypa
     assert (output_dir / "sales_bar.png").stat().st_size > 0
     assert (output_dir / "sales_line.png").stat().st_size > 0
     assert "Visualizing column: sales" in capsys.readouterr().out
+
+
+def test_explicit_complex_column_is_rejected():
+    frame = pd.DataFrame({"signal": [1 + 2j, 3 + 4j]})
+
+    with pytest.raises(ValueError, match="complex"):
+        select_numeric_series(frame, "signal")
+
+
+def test_automatic_selection_skips_complex_columns():
+    frame = pd.DataFrame(
+        {
+            "complex_signal": [1 + 2j, 3 + 4j],
+            "sales": [10.0, 20.0],
+        }
+    )
+
+    column, series = select_numeric_series(frame)
+
+    assert column == "sales"
+    assert series.tolist() == [10.0, 20.0]
