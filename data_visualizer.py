@@ -76,8 +76,10 @@ def visualize_data(csv_file, column=None, output_dir=None):
         else:
             plt.savefig(destination / f"{safe_name}_line.png", dpi=150, bbox_inches="tight")
             plt.close()
+        return 0
     except (OSError, pd.errors.ParserError, ValueError) as exc:
         print(f"Error processing file: {exc}")
+        return 1
 
 
 def main(argv=None):
@@ -89,8 +91,8 @@ def main(argv=None):
         help="Save PNG charts to this directory instead of opening interactive windows",
     )
     args = parser.parse_args(argv)
-    visualize_data(args.csv_file, column=args.column, output_dir=args.output_dir)
+    return visualize_data(args.csv_file, column=args.column, output_dir=args.output_dir)
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
