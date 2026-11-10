@@ -99,3 +99,32 @@ def test_automatic_selection_skips_complex_columns():
 
     assert column == "sales"
     assert series.tolist() == [10.0, 20.0]
+
+
+def test_visualizer_returns_failure_for_missing_input(tmp_path, capsys):
+    status = visualize_data(tmp_path / "missing.csv", output_dir=tmp_path / "out")
+
+    assert status == 1
+    assert "Error processing file" in capsys.readouterr().out
+
+
+def test_visualizer_cli_returns_failure_for_invalid_column(tmp_path, capsys):
+    from data_visualizer import main
+
+    csv_path = tmp_path / "sales.csv"
+    pd.DataFrame({"sales": [12, 20]}).to_csv(csv_path, index=False)
+
+    assert main([str(csv_path), "--column", "unknown", "--output-dir", str(tmp_path / "charts")]) == 1
+    assert "not found" in capsys.readouterr().out
+
+
+def test_visualizer_cli_returns_success_after_saving_pngs(tmp_path):
+    from data_visualizer import main
+
+    csv_path = tmp_path / "sales.csv"
+    pd.DataFrame({"sales": [12, 20]}).to_csv(csv_path, index=False)
+    destination = tmp_path / "charts"
+
+    assert main([str(csv_path), "--output-dir", str(destination)]) == 0
+    assert (destination / "sales_bar.png").is_file()
+    assert (destination / "sales_line.png").is_file()
