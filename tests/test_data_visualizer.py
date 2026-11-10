@@ -31,7 +31,7 @@ def test_automatic_selection_skips_numeric_columns_without_values():
 def test_numeric_selection_ignores_infinite_observations():
     frame = pd.DataFrame(
         {
-            "infinite_only": [np.inf, -np.inf],
+            "infinite_only": [np.inf, -np.inf, np.inf, -np.inf],
             "sales": [10.0, np.inf, None, 30.0],
         }
     )
