@@ -9,6 +9,8 @@ import pandas as pd
 
 def select_numeric_series(data, column=None):
     """Choose a real-valued numeric column and return finite, non-missing observations."""
+    if data.columns.duplicated().any():
+        raise ValueError("Column names must be unique before selecting a numeric series.")
     if column is not None:
         if column not in data.columns:
             raise ValueError(f"Column {column!r} was not found in the CSV.")
