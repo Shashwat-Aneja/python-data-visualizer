@@ -40,6 +40,7 @@ def select_numeric_series(data, column=None):
 
 
 def visualize_data(csv_file, column=None, output_dir=None):
+    owned_figures = []
     try:
         data = pd.read_csv(csv_file)
         print(f"Loaded {csv_file} successfully!")
@@ -55,7 +56,7 @@ def visualize_data(csv_file, column=None, output_dir=None):
             destination.mkdir(parents=True, exist_ok=True)
             safe_name = re.sub(r"[^A-Za-z0-9_-]+", "_", selected_column).strip("_") or "metric"
 
-        plt.figure()
+        owned_figures.append(plt.figure())
         series.plot(kind="bar")
         plt.title(f"Bar Chart of {selected_column}")
         plt.xlabel("Index")
@@ -67,7 +68,7 @@ def visualize_data(csv_file, column=None, output_dir=None):
             plt.savefig(destination / f"{safe_name}_bar.png", dpi=150, bbox_inches="tight")
             plt.close()
 
-        plt.figure()
+        owned_figures.append(plt.figure())
         series.plot(kind="line")
         plt.title(f"Line Chart of {selected_column}")
         plt.xlabel("Index")
@@ -82,6 +83,9 @@ def visualize_data(csv_file, column=None, output_dir=None):
     except (OSError, pd.errors.ParserError, ValueError) as exc:
         print(f"Error processing file: {exc}")
         return 1
+    finally:
+        for figure in owned_figures:
+            plt.close(figure)
 
 
 def main(argv=None):
