@@ -15,7 +15,7 @@ def select_numeric_series(data, column=None):
         if column not in data.columns:
             raise ValueError(f"Column {column!r} was not found in the CSV.")
         selected = data[column]
-        if not pd.api.types.is_numeric_dtype(selected) or pd.api.types.is_complex_dtype(selected):
+        if not pd.api.types.is_numeric_dtype(selected) or pd.api.types.is_complex_dtype(selected) or pd.api.types.is_bool_dtype(selected):
             raise ValueError(f"Column {column!r} is not numeric or contains unsupported complex values.")
         series = selected.dropna()
         series = series[np.isfinite(series.to_numpy(dtype=float))]
@@ -28,6 +28,7 @@ def select_numeric_series(data, column=None):
         for candidate in data.columns
         if pd.api.types.is_numeric_dtype(data[candidate])
         and not pd.api.types.is_complex_dtype(data[candidate])
+        and not pd.api.types.is_bool_dtype(data[candidate])
     ]
     for candidate in numeric_columns:
         series = data[candidate].dropna()
