@@ -9,11 +9,13 @@ import pandas as pd
 
 def select_numeric_series(data, column=None):
     """Choose a real-valued numeric column and return finite, non-missing observations."""
+    if data.columns.duplicated().any():
+        raise ValueError("Column names must be unique before selecting a numeric series.")
     if column is not None:
         if column not in data.columns:
             raise ValueError(f"Column {column!r} was not found in the CSV.")
         selected = data[column]
-        if not pd.api.types.is_numeric_dtype(selected) or pd.api.types.is_complex_dtype(selected):
+        if not pd.api.types.is_numeric_dtype(selected) or pd.api.types.is_complex_dtype(selected) or pd.api.types.is_bool_dtype(selected):
             raise ValueError(f"Column {column!r} is not numeric or contains unsupported complex values.")
         series = selected.dropna()
         series = series[np.isfinite(series.to_numpy(dtype=float))]
@@ -26,6 +28,7 @@ def select_numeric_series(data, column=None):
         for candidate in data.columns
         if pd.api.types.is_numeric_dtype(data[candidate])
         and not pd.api.types.is_complex_dtype(data[candidate])
+        and not pd.api.types.is_bool_dtype(data[candidate])
     ]
     for candidate in numeric_columns:
         series = data[candidate].dropna()
@@ -37,13 +40,31 @@ def select_numeric_series(data, column=None):
     raise ValueError("No supported real numeric columns found to visualize.")
 
 
-def visualize_data(csv_file, column=None, output_dir=None):
+def limit_plot_points(series, max_points):
+    if not isinstance(max_points, int) or isinstance(max_points, bool) or max_points < 2:
+        raise ValueError("max_points must be an integer of at least 2.")
+    if len(series) <= max_points:
+        return series
+    return series.iloc[np.linspace(0, len(series) - 1, max_points, dtype=int)]
+
+
+def visualize_data(csv_file, column=None, output_dir=None, max_points=1000, x_column=None):
+    owned_figures = []
     try:
         data = pd.read_csv(csv_file)
         print(f"Loaded {csv_file} successfully!")
         print("Columns detected:", list(data.columns))
 
         selected_column, series = select_numeric_series(data, column)
+        if x_column is not None:
+            if x_column not in data.columns:
+                raise ValueError(f"X column {x_column!r} was not found.")
+            labels = data.loc[series.index, x_column]
+            if labels.isna().any():
+                raise ValueError("X column contains missing labels for plotted rows.")
+            series = series.copy()
+            series.index = pd.Index(labels, name=x_column)
+        series = limit_plot_points(series, max_points)
         print(f"📊 Visualizing column: {selected_column} ({len(series)} usable rows)")
 
         destination = None
@@ -53,10 +74,10 @@ def visualize_data(csv_file, column=None, output_dir=None):
             destination.mkdir(parents=True, exist_ok=True)
             safe_name = re.sub(r"[^A-Za-z0-9_-]+", "_", selected_column).strip("_") or "metric"
 
-        plt.figure()
+        owned_figures.append(plt.figure())
         series.plot(kind="bar")
         plt.title(f"Bar Chart of {selected_column}")
-        plt.xlabel("Index")
+        plt.xlabel(x_column or "Index")
         plt.ylabel(selected_column)
         plt.tight_layout()
         if destination is None:
@@ -65,10 +86,10 @@ def visualize_data(csv_file, column=None, output_dir=None):
             plt.savefig(destination / f"{safe_name}_bar.png", dpi=150, bbox_inches="tight")
             plt.close()
 
-        plt.figure()
+        owned_figures.append(plt.figure())
         series.plot(kind="line")
         plt.title(f"Line Chart of {selected_column}")
-        plt.xlabel("Index")
+        plt.xlabel(x_column or "Index")
         plt.ylabel(selected_column)
         plt.tight_layout()
         if destination is None:
@@ -80,6 +101,9 @@ def visualize_data(csv_file, column=None, output_dir=None):
     except (OSError, pd.errors.ParserError, ValueError) as exc:
         print(f"Error processing file: {exc}")
         return 1
+    finally:
+        for figure in owned_figures:
+            plt.close(figure)
 
 
 def main(argv=None):
@@ -90,8 +114,10 @@ def main(argv=None):
         "--output-dir",
         help="Save PNG charts to this directory instead of opening interactive windows",
     )
+    parser.add_argument("--max-points", type=int, default=1000, help="Maximum points plotted, sampled evenly including both endpoints")
+    parser.add_argument("--x-column", help="Column to use for row labels on the horizontal axis")
     args = parser.parse_args(argv)
-    return visualize_data(args.csv_file, column=args.column, output_dir=args.output_dir)
+    return visualize_data(args.csv_file, column=args.column, output_dir=args.output_dir, max_points=args.max_points, x_column=args.x_column)
 
 
 if __name__ == "__main__":
