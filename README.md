@@ -67,3 +67,5 @@ python-data-visualizer/
 Built by **Shashwat Aneja**
 
 Plots are bounded to 1,000 evenly spaced observations by default, retaining both endpoints. Use `--max-points N` to control rendering cost; omitted points are not aggregated or interpolated.
+
+`--x-column month --column sales` labels charts using another CSV column, preserving row order and alignment after missing numeric values are dropped.

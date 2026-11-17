@@ -48,7 +48,7 @@ def limit_plot_points(series, max_points):
     return series.iloc[np.linspace(0, len(series) - 1, max_points, dtype=int)]
 
 
-def visualize_data(csv_file, column=None, output_dir=None, max_points=1000):
+def visualize_data(csv_file, column=None, output_dir=None, max_points=1000, x_column=None):
     owned_figures = []
     try:
         data = pd.read_csv(csv_file)
@@ -56,6 +56,14 @@ def visualize_data(csv_file, column=None, output_dir=None, max_points=1000):
         print("Columns detected:", list(data.columns))
 
         selected_column, series = select_numeric_series(data, column)
+        if x_column is not None:
+            if x_column not in data.columns:
+                raise ValueError(f"X column {x_column!r} was not found.")
+            labels = data.loc[series.index, x_column]
+            if labels.isna().any():
+                raise ValueError("X column contains missing labels for plotted rows.")
+            series = series.copy()
+            series.index = pd.Index(labels, name=x_column)
         series = limit_plot_points(series, max_points)
         print(f"📊 Visualizing column: {selected_column} ({len(series)} usable rows)")
 
@@ -69,7 +77,7 @@ def visualize_data(csv_file, column=None, output_dir=None, max_points=1000):
         owned_figures.append(plt.figure())
         series.plot(kind="bar")
         plt.title(f"Bar Chart of {selected_column}")
-        plt.xlabel("Index")
+        plt.xlabel(x_column or "Index")
         plt.ylabel(selected_column)
         plt.tight_layout()
         if destination is None:
@@ -81,7 +89,7 @@ def visualize_data(csv_file, column=None, output_dir=None, max_points=1000):
         owned_figures.append(plt.figure())
         series.plot(kind="line")
         plt.title(f"Line Chart of {selected_column}")
-        plt.xlabel("Index")
+        plt.xlabel(x_column or "Index")
         plt.ylabel(selected_column)
         plt.tight_layout()
         if destination is None:
@@ -107,8 +115,9 @@ def main(argv=None):
         help="Save PNG charts to this directory instead of opening interactive windows",
     )
     parser.add_argument("--max-points", type=int, default=1000, help="Maximum points plotted, sampled evenly including both endpoints")
+    parser.add_argument("--x-column", help="Column to use for row labels on the horizontal axis")
     args = parser.parse_args(argv)
-    return visualize_data(args.csv_file, column=args.column, output_dir=args.output_dir, max_points=args.max_points)
+    return visualize_data(args.csv_file, column=args.column, output_dir=args.output_dir, max_points=args.max_points, x_column=args.x_column)
 
 
 if __name__ == "__main__":
