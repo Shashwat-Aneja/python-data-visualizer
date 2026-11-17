@@ -40,7 +40,15 @@ def select_numeric_series(data, column=None):
     raise ValueError("No supported real numeric columns found to visualize.")
 
 
-def visualize_data(csv_file, column=None, output_dir=None):
+def limit_plot_points(series, max_points):
+    if not isinstance(max_points, int) or isinstance(max_points, bool) or max_points < 2:
+        raise ValueError("max_points must be an integer of at least 2.")
+    if len(series) <= max_points:
+        return series
+    return series.iloc[np.linspace(0, len(series) - 1, max_points, dtype=int)]
+
+
+def visualize_data(csv_file, column=None, output_dir=None, max_points=1000):
     owned_figures = []
     try:
         data = pd.read_csv(csv_file)
@@ -48,6 +56,7 @@ def visualize_data(csv_file, column=None, output_dir=None):
         print("Columns detected:", list(data.columns))
 
         selected_column, series = select_numeric_series(data, column)
+        series = limit_plot_points(series, max_points)
         print(f"📊 Visualizing column: {selected_column} ({len(series)} usable rows)")
 
         destination = None
@@ -97,8 +106,9 @@ def main(argv=None):
         "--output-dir",
         help="Save PNG charts to this directory instead of opening interactive windows",
     )
+    parser.add_argument("--max-points", type=int, default=1000, help="Maximum points plotted, sampled evenly including both endpoints")
     args = parser.parse_args(argv)
-    return visualize_data(args.csv_file, column=args.column, output_dir=args.output_dir)
+    return visualize_data(args.csv_file, column=args.column, output_dir=args.output_dir, max_points=args.max_points)
 
 
 if __name__ == "__main__":
