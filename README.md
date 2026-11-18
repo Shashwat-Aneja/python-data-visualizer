@@ -71,3 +71,5 @@ Plots are bounded to 1,000 evenly spaced observations by default, retaining both
 `--x-column month --column sales` labels charts using another CSV column, preserving row order and alignment after missing numeric values are dropped.
 
 When `--x-column` is given without `--column`, automatic metric selection excludes the X column. Numeric time/index columns therefore no longer get plotted against themselves.
+
+Each PNG is rendered to a temporary file and atomically replaces its destination only after rendering succeeds. A failed render preserves that chart’s previous file; the two chart files are committed independently.

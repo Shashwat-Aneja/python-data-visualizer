@@ -1,5 +1,7 @@
 import argparse
 import re
+import os
+import tempfile
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -48,6 +50,17 @@ def limit_plot_points(series, max_points):
     return series.iloc[np.linspace(0, len(series) - 1, max_points, dtype=int)]
 
 
+def save_chart_atomic(destination):
+    """Preserve an existing PNG if rendering or filesystem replacement fails."""
+    descriptor, temporary = tempfile.mkstemp(prefix=f".{destination.stem}.", suffix=".png", dir=destination.parent)
+    os.close(descriptor)
+    try:
+        plt.savefig(temporary, dpi=150, bbox_inches="tight", format="png")
+        os.replace(temporary, destination)
+    finally:
+        Path(temporary).unlink(missing_ok=True)
+
+
 def visualize_data(csv_file, column=None, output_dir=None, max_points=1000, x_column=None):
     owned_figures = []
     try:
@@ -88,7 +101,7 @@ def visualize_data(csv_file, column=None, output_dir=None, max_points=1000, x_co
         if destination is None:
             plt.show()
         else:
-            plt.savefig(destination / f"{safe_name}_bar.png", dpi=150, bbox_inches="tight")
+            save_chart_atomic(destination / f"{safe_name}_bar.png")
             plt.close()
 
         owned_figures.append(plt.figure())
@@ -100,7 +113,7 @@ def visualize_data(csv_file, column=None, output_dir=None, max_points=1000, x_co
         if destination is None:
             plt.show()
         else:
-            plt.savefig(destination / f"{safe_name}_line.png", dpi=150, bbox_inches="tight")
+            save_chart_atomic(destination / f"{safe_name}_line.png")
             plt.close()
         return 0
     except (OSError, pd.errors.ParserError, ValueError) as exc:
