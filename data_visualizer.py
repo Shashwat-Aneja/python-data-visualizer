@@ -55,7 +55,12 @@ def visualize_data(csv_file, column=None, output_dir=None, max_points=1000, x_co
         print(f"Loaded {csv_file} successfully!")
         print("Columns detected:", list(data.columns))
 
-        selected_column, series = select_numeric_series(data, column)
+        selection_data = data
+        if column is None and x_column is not None:
+            if x_column not in data.columns:
+                raise ValueError(f"X column {x_column!r} was not found.")
+            selection_data = data.drop(columns=[x_column])
+        selected_column, series = select_numeric_series(selection_data, column)
         if x_column is not None:
             if x_column not in data.columns:
                 raise ValueError(f"X column {x_column!r} was not found.")
