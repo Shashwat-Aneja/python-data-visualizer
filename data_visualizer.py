@@ -61,7 +61,7 @@ def save_chart_atomic(destination):
         Path(temporary).unlink(missing_ok=True)
 
 
-def visualize_data(csv_file, column=None, output_dir=None, max_points=1000, x_column=None):
+def visualize_data(csv_file, column=None, output_dir=None, max_points=1000, x_column=None, histogram=False):
     owned_figures = []
     try:
         data = pd.read_csv(csv_file)
@@ -82,6 +82,7 @@ def visualize_data(csv_file, column=None, output_dir=None, max_points=1000, x_co
                 raise ValueError("X column contains missing labels for plotted rows.")
             series = series.copy()
             series.index = pd.Index(labels, name=x_column)
+        distribution_values = series.to_numpy(dtype=float)
         series = limit_plot_points(series, max_points)
         print(f"📊 Visualizing column: {selected_column} ({len(series)} usable rows)")
 
@@ -115,6 +116,18 @@ def visualize_data(csv_file, column=None, output_dir=None, max_points=1000, x_co
         else:
             save_chart_atomic(destination / f"{safe_name}_line.png")
             plt.close()
+        if histogram:
+            owned_figures.append(plt.figure())
+            plt.hist(distribution_values, bins="auto")
+            plt.title(f"Distribution of {selected_column}")
+            plt.xlabel(selected_column)
+            plt.ylabel("Frequency")
+            plt.tight_layout()
+            if destination is None:
+                plt.show()
+            else:
+                save_chart_atomic(destination / f"{safe_name}_histogram.png")
+                plt.close()
         return 0
     except (OSError, pd.errors.ParserError, ValueError) as exc:
         print(f"Error processing file: {exc}")
@@ -134,8 +147,10 @@ def main(argv=None):
     )
     parser.add_argument("--max-points", type=int, default=1000, help="Maximum points plotted, sampled evenly including both endpoints")
     parser.add_argument("--x-column", help="Column to use for row labels on the horizontal axis")
+    parser.add_argument("--histogram", action="store_true", help="Also plot a distribution using every finite value, without point sampling")
     args = parser.parse_args(argv)
-    return visualize_data(args.csv_file, column=args.column, output_dir=args.output_dir, max_points=args.max_points, x_column=args.x_column)
+    options = {"histogram": True} if args.histogram else {}
+    return visualize_data(args.csv_file, column=args.column, output_dir=args.output_dir, max_points=args.max_points, x_column=args.x_column, **options)
 
 
 if __name__ == "__main__":
