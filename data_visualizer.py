@@ -92,6 +92,12 @@ def visualize_data(csv_file, column=None, output_dir=None, max_points=1000, x_co
             destination = Path(output_dir).expanduser()
             destination.mkdir(parents=True, exist_ok=True)
             safe_name = re.sub(r"[^A-Za-z0-9_-]+", "_", selected_column).strip("_") or "metric"
+            source = Path(csv_file).expanduser().resolve()
+            kinds = ["bar", "line"] + (["histogram"] if histogram else [])
+            for kind in kinds:
+                output = destination / f"{safe_name}_{kind}.png"
+                if output.resolve() == source or (output.exists() and output.samefile(source)):
+                    raise ValueError("Chart outputs must not overwrite the source data file.")
 
         owned_figures.append(plt.figure())
         series.plot(kind="bar")
