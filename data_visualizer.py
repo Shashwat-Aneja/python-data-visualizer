@@ -1,3 +1,4 @@
+import csv
 import argparse
 import re
 import os
@@ -7,6 +8,15 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+
+
+def _reject_duplicate_headers(csv_file):
+    """Do not let pandas silently rename ambiguous source CSV columns."""
+    if isinstance(csv_file, (str, os.PathLike)) and Path(csv_file).is_file():
+        with open(csv_file, encoding="utf-8-sig", newline="") as source:
+            headers = next(csv.reader(source), [])
+        if len(headers) != len(set(headers)):
+            raise ValueError("CSV column names must be unique; duplicate headers are ambiguous.")
 
 
 def select_numeric_series(data, column=None):
@@ -65,6 +75,7 @@ def visualize_data(csv_file, column=None, output_dir=None, max_points=1000, x_co
     owned_figures = []
     try:
         data = pd.read_csv(csv_file)
+        _reject_duplicate_headers(csv_file)
         print(f"Loaded {csv_file} successfully!")
         print("Columns detected:", list(data.columns))
 
@@ -124,7 +135,8 @@ def visualize_data(csv_file, column=None, output_dir=None, max_points=1000, x_co
             plt.close()
         if histogram:
             owned_figures.append(plt.figure())
-            plt.hist(distribution_values, bins="auto")
+            bin_count = min(100, max(1, int(np.ceil(np.sqrt(len(distribution_values))))))
+            plt.hist(distribution_values, bins=bin_count)
             plt.title(f"Distribution of {selected_column}")
             plt.xlabel(selected_column)
             plt.ylabel("Frequency")
