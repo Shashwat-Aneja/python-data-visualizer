@@ -135,7 +135,8 @@ def visualize_data(csv_file, column=None, output_dir=None, max_points=1000, x_co
             plt.close()
         if histogram:
             owned_figures.append(plt.figure())
-            plt.hist(distribution_values, bins="auto")
+            bin_count = min(100, max(1, int(np.ceil(np.sqrt(len(distribution_values))))))
+            plt.hist(distribution_values, bins=bin_count)
             plt.title(f"Distribution of {selected_column}")
             plt.xlabel(selected_column)
             plt.ylabel("Frequency")
