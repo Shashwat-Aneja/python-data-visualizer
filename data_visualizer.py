@@ -1,5 +1,6 @@
 import csv
 import argparse
+import json
 import re
 import os
 import tempfile
@@ -71,7 +72,7 @@ def save_chart_atomic(destination):
         Path(temporary).unlink(missing_ok=True)
 
 
-def visualize_data(csv_file, column=None, output_dir=None, max_points=1000, x_column=None, histogram=False):
+def visualize_data(csv_file, column=None, output_dir=None, max_points=1000, x_column=None, histogram=False, summary_output=None):
     owned_figures = []
     try:
         data = pd.read_csv(csv_file)
@@ -93,6 +94,7 @@ def visualize_data(csv_file, column=None, output_dir=None, max_points=1000, x_co
                 raise ValueError("X column contains missing labels for plotted rows.")
             series = series.copy()
             series.index = pd.Index(labels, name=x_column)
+        usable_rows = len(series)
         distribution_values = series.to_numpy(dtype=float)
         series = limit_plot_points(series, max_points)
         print(f"📊 Visualizing column: {selected_column} ({len(series)} usable rows)")
@@ -110,6 +112,13 @@ def visualize_data(csv_file, column=None, output_dir=None, max_points=1000, x_co
                 if output.resolve() == source or (output.exists() and output.samefile(source)):
                     raise ValueError("Chart outputs must not overwrite the source data file.")
 
+        summary_path = Path(summary_output).expanduser().resolve() if summary_output is not None else None
+        if summary_path is not None:
+            protected = [Path(csv_file).expanduser().resolve()]
+            if destination is not None:
+                protected += [destination / f"{safe_name}_{kind}.png" for kind in (["bar", "line"] + (["histogram"] if histogram else []))]
+            if any(summary_path == path.resolve() or (summary_path.exists() and path.exists() and summary_path.samefile(path)) for path in protected):
+                raise ValueError("Summary output must differ from source data and chart outputs.")
         owned_figures.append(plt.figure())
         series.plot(kind="bar")
         plt.title(f"Bar Chart of {selected_column}")
@@ -146,6 +155,8 @@ def visualize_data(csv_file, column=None, output_dir=None, max_points=1000, x_co
             else:
                 save_chart_atomic(destination / f"{safe_name}_histogram.png")
                 plt.close()
+        if summary_path is not None:
+            write_chart_summary({"column": selected_column, "input_rows": len(data), "usable_rows": usable_rows, "dropped_rows": len(data) - usable_rows, "plotted_rows": len(series), "histogram_rows": usable_rows if histogram else 0}, summary_path)
         return 0
     except (OSError, pd.errors.ParserError, ValueError) as exc:
         print(f"Error processing file: {exc}")
@@ -153,6 +164,21 @@ def visualize_data(csv_file, column=None, output_dir=None, max_points=1000, x_co
     finally:
         for figure in owned_figures:
             plt.close(figure)
+
+
+def write_chart_summary(payload, destination):
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=destination.parent, delete=False) as handle:
+            temporary = Path(handle.name)
+            json.dump(payload, handle, allow_nan=False, indent=2)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, destination)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
 
 
 def main(argv=None):
@@ -166,8 +192,11 @@ def main(argv=None):
     parser.add_argument("--max-points", type=int, default=1000, help="Maximum points plotted, sampled evenly including both endpoints")
     parser.add_argument("--x-column", help="Column to use for row labels on the horizontal axis")
     parser.add_argument("--histogram", action="store_true", help="Also plot a distribution using every finite value, without point sampling")
+    parser.add_argument("--summary-output", help="Atomically save numeric filtering and point-sampling counts as JSON")
     args = parser.parse_args(argv)
     options = {"histogram": True} if args.histogram else {}
+    if args.summary_output:
+        options["summary_output"] = args.summary_output
     return visualize_data(args.csv_file, column=args.column, output_dir=args.output_dir, max_points=args.max_points, x_column=args.x_column, **options)
 
 

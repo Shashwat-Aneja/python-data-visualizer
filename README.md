@@ -75,3 +75,5 @@ When `--x-column` is given without `--column`, automatic metric selection exclud
 Each PNG is rendered to a temporary file and atomically replaces its destination only after rendering succeeds. A failed render preserves that chart’s previous file; the two chart files are committed independently.
 
 `--histogram` adds a distribution chart from all finite observations. Unlike the bar and line charts, histogram counts are not reduced by `--max-points`.
+
+`--summary-output summary.json` atomically records input, usable, dropped and plotted row counts, plus full histogram coverage. The summary cannot alias the input CSV or chart outputs. This makes filtering and downsampling visible to batch users.
