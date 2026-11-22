@@ -77,3 +77,7 @@ Each PNG is rendered to a temporary file and atomically replaces its destination
 `--histogram` adds a distribution chart from all finite observations. Unlike the bar and line charts, histogram counts are not reduced by `--max-points`.
 
 `--summary-output summary.json` atomically records input, usable, dropped and plotted row counts, plus full histogram coverage. The summary cannot alias the input CSV or chart outputs. This makes filtering and downsampling visible to batch users.
+
+`--delimiter ";"`, `--delimiter tab` and `--delimiter "|"` support alternate input CSV separators, including quoted fields. Duplicate-header validation uses the selected separator. The default input and all CSV exports remain comma-separated.
+
+`--x-column day --sort-x` stably orders X values before point sampling and plotting. Numeric values sort numerically and text labels lexically; the option does not infer or parse timestamps. Equal X values retain source order. Without the flag, source order is preserved.

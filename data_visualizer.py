@@ -11,11 +11,19 @@ import numpy as np
 import pandas as pd
 
 
-def _reject_duplicate_headers(csv_file):
+def _read_csv_input(csv_file, delimiter=",", **options):
+    if delimiter not in (",", ";", "\t", "|"):
+        raise ValueError("Unsupported input delimiter.")
+    frame = pd.read_csv(csv_file, **options, **({"sep": delimiter} if delimiter != "," else {}))
+    _reject_duplicate_headers(csv_file, delimiter)
+    return frame
+
+
+def _reject_duplicate_headers(csv_file, delimiter=","):
     """Do not let pandas silently rename ambiguous source CSV columns."""
     if isinstance(csv_file, (str, os.PathLike)) and Path(csv_file).is_file():
         with open(csv_file, encoding="utf-8-sig", newline="") as source:
-            headers = next(csv.reader(source), [])
+            headers = next(csv.reader(source, delimiter=delimiter), [])
         if len(headers) != len(set(headers)):
             raise ValueError("CSV column names must be unique; duplicate headers are ambiguous.")
 
@@ -72,11 +80,10 @@ def save_chart_atomic(destination):
         Path(temporary).unlink(missing_ok=True)
 
 
-def visualize_data(csv_file, column=None, output_dir=None, max_points=1000, x_column=None, histogram=False, summary_output=None):
+def visualize_data(csv_file, column=None, output_dir=None, max_points=1000, x_column=None, histogram=False, summary_output=None, delimiter=",", sort_x=False):
     owned_figures = []
     try:
-        data = pd.read_csv(csv_file)
-        _reject_duplicate_headers(csv_file)
+        data = _read_csv_input(csv_file, delimiter)
         print(f"Loaded {csv_file} successfully!")
         print("Columns detected:", list(data.columns))
 
@@ -94,6 +101,10 @@ def visualize_data(csv_file, column=None, output_dir=None, max_points=1000, x_co
                 raise ValueError("X column contains missing labels for plotted rows.")
             series = series.copy()
             series.index = pd.Index(labels, name=x_column)
+        if sort_x:
+            if x_column is None:
+                raise ValueError("Sorting X values requires an explicit x_column.")
+            series = series.sort_index(kind="stable")
         usable_rows = len(series)
         distribution_values = series.to_numpy(dtype=float)
         series = limit_plot_points(series, max_points)
@@ -193,8 +204,15 @@ def main(argv=None):
     parser.add_argument("--x-column", help="Column to use for row labels on the horizontal axis")
     parser.add_argument("--histogram", action="store_true", help="Also plot a distribution using every finite value, without point sampling")
     parser.add_argument("--summary-output", help="Atomically save numeric filtering and point-sampling counts as JSON")
+    parser.add_argument("--delimiter", choices=(",", ";", "tab", "|"), default=",", help="Input CSV delimiter; exports remain comma-separated")
+    parser.add_argument("--sort-x", action="store_true", help="Stably sort explicit X values before sampling and plotting")
     args = parser.parse_args(argv)
+    delimiter = "\t" if args.delimiter == "tab" else args.delimiter
     options = {"histogram": True} if args.histogram else {}
+    if args.sort_x:
+        options["sort_x"] = True
+    if delimiter != ",":
+        options["delimiter"] = delimiter
     if args.summary_output:
         options["summary_output"] = args.summary_output
     return visualize_data(args.csv_file, column=args.column, output_dir=args.output_dir, max_points=args.max_points, x_column=args.x_column, **options)
