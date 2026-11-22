@@ -80,7 +80,7 @@ def save_chart_atomic(destination):
         Path(temporary).unlink(missing_ok=True)
 
 
-def visualize_data(csv_file, column=None, output_dir=None, max_points=1000, x_column=None, histogram=False, summary_output=None, delimiter=","):
+def visualize_data(csv_file, column=None, output_dir=None, max_points=1000, x_column=None, histogram=False, summary_output=None, delimiter=",", sort_x=False):
     owned_figures = []
     try:
         data = _read_csv_input(csv_file, delimiter)
@@ -101,6 +101,10 @@ def visualize_data(csv_file, column=None, output_dir=None, max_points=1000, x_co
                 raise ValueError("X column contains missing labels for plotted rows.")
             series = series.copy()
             series.index = pd.Index(labels, name=x_column)
+        if sort_x:
+            if x_column is None:
+                raise ValueError("Sorting X values requires an explicit x_column.")
+            series = series.sort_index(kind="stable")
         usable_rows = len(series)
         distribution_values = series.to_numpy(dtype=float)
         series = limit_plot_points(series, max_points)
@@ -201,9 +205,12 @@ def main(argv=None):
     parser.add_argument("--histogram", action="store_true", help="Also plot a distribution using every finite value, without point sampling")
     parser.add_argument("--summary-output", help="Atomically save numeric filtering and point-sampling counts as JSON")
     parser.add_argument("--delimiter", choices=(",", ";", "tab", "|"), default=",", help="Input CSV delimiter; exports remain comma-separated")
+    parser.add_argument("--sort-x", action="store_true", help="Stably sort explicit X values before sampling and plotting")
     args = parser.parse_args(argv)
     delimiter = "\t" if args.delimiter == "tab" else args.delimiter
     options = {"histogram": True} if args.histogram else {}
+    if args.sort_x:
+        options["sort_x"] = True
     if delimiter != ",":
         options["delimiter"] = delimiter
     if args.summary_output:
