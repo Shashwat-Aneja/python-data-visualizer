@@ -81,3 +81,5 @@ Each PNG is rendered to a temporary file and atomically replaces its destination
 `--delimiter ";"`, `--delimiter tab` and `--delimiter "|"` support alternate input CSV separators, including quoted fields. Duplicate-header validation uses the selected separator. The default input and all CSV exports remain comma-separated.
 
 `--x-column day --sort-x` stably orders X values before point sampling and plotting. Numeric values sort numerically and text labels lexically; the option does not infer or parse timestamps. Equal X values retain source order. Without the flag, source order is preserved.
+
+Seekable caller-owned text and UTF-8 binary CSV streams now receive the same duplicate-header checks as file paths, before pandas can rename ambiguous columns. Validation restores the starting position and leaves caller streams open; nonseekable stream objects are rejected explicitly.
