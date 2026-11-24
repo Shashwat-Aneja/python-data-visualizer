@@ -87,3 +87,5 @@ Seekable caller-owned text and UTF-8 binary CSV streams now receive the same dup
 CSV paths ending in `.gz`, `.bz2`, or `.xz` are supported without unpacking a separate file. Header validation reads the same compression format as pandas and still rejects duplicate columns, including BOM-prefixed quoted headers and alternate delimiters. Archive containers such as ZIP/TAR are outside this feature.
 
 `--log-y` renders bar and line Y axes logarithmically for strictly positive usable observations. Zero/negative values fail before chart output; they are not silently dropped to make the axis work. Histogram frequency axes remain linear.
+
+`--chart-kind bar|line|both` selects the charts actually rendered, avoiding unnecessary rendering and file replacement. The default is both; `--histogram` is independent. Only requested chart destinations participate in collision checks.
