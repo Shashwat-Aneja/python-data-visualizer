@@ -1,3 +1,6 @@
+import gzip
+import bz2
+import lzma
 import io
 import csv
 import argparse
@@ -16,7 +19,10 @@ def _read_csv_input(csv_file, delimiter=",", **options):
     if delimiter not in (",", ";", "\t", "|"):
         raise ValueError("Unsupported input delimiter.")
     _reject_duplicate_headers(csv_file, delimiter)
-    frame = pd.read_csv(csv_file, **options, **({"sep": delimiter} if delimiter != "," else {}))
+    try:
+        frame = pd.read_csv(csv_file, **options, **({"sep": delimiter} if delimiter != "," else {}))
+    except (EOFError, lzma.LZMAError) as exc:
+        raise ValueError("Compressed CSV input is corrupt or incomplete.") from exc
     return frame
 
 
@@ -60,8 +66,12 @@ def _reject_duplicate_headers(csv_file, delimiter=","):
     if isinstance(csv_file, (str, os.PathLike)):
         if not Path(csv_file).is_file():
             return
-        with open(csv_file, encoding="utf-8-sig", newline="") as source:
-            headers = next(csv.reader(header_lines(source), delimiter=delimiter), [])
+        opener = {".gz": gzip.open, ".bz2": bz2.open, ".xz": lzma.open}.get(Path(csv_file).suffix, open)
+        try:
+            with opener(csv_file, mode="rt", encoding="utf-8-sig", newline="") as source:
+                headers = next(csv.reader(header_lines(source), delimiter=delimiter), [])
+        except (EOFError, lzma.LZMAError) as exc:
+            raise ValueError("Compressed CSV input is corrupt or incomplete.") from exc
     else:
         if not all(hasattr(csv_file, name) for name in ("read", "seek", "tell")) or (hasattr(csv_file, "seekable") and not csv_file.seekable()):
             raise ValueError("CSV streams must be seekable for header validation.")
@@ -130,9 +140,14 @@ def save_chart_atomic(destination):
         Path(temporary).unlink(missing_ok=True)
 
 
-def visualize_data(csv_file, column=None, output_dir=None, max_points=1000, x_column=None, histogram=False, summary_output=None, delimiter=",", sort_x=False):
+def visualize_data(csv_file, column=None, output_dir=None, max_points=1000, x_column=None, histogram=False, summary_output=None, delimiter=",", sort_x=False, log_y=False, chart_kind="both"):
     owned_figures = []
     try:
+        if not isinstance(chart_kind, str) or chart_kind not in {"bar", "line", "both"}:
+            raise ValueError("chart_kind must be bar, line, or both.")
+        kinds = (["bar", "line"] if chart_kind == "both" else [chart_kind]) + (["histogram"] if histogram else [])
+        if not isinstance(log_y, bool):
+            raise ValueError("log_y must be a boolean.")
         data = _read_csv_input(csv_file, delimiter)
         print(f"Loaded {csv_file} successfully!")
         print("Columns detected:", list(data.columns))
@@ -155,6 +170,8 @@ def visualize_data(csv_file, column=None, output_dir=None, max_points=1000, x_co
             if x_column is None:
                 raise ValueError("Sorting X values requires an explicit x_column.")
             series = series.sort_index(kind="stable")
+        if log_y and (series <= 0).any():
+            raise ValueError("Logarithmic Y axes require strictly positive usable values.")
         usable_rows = len(series)
         distribution_values = series.to_numpy(dtype=float)
         series = limit_plot_points(series, max_points)
@@ -167,7 +184,6 @@ def visualize_data(csv_file, column=None, output_dir=None, max_points=1000, x_co
             destination.mkdir(parents=True, exist_ok=True)
             safe_name = re.sub(r"[^A-Za-z0-9_-]+", "_", selected_column).strip("_") or "metric"
             source = Path(csv_file).expanduser().resolve()
-            kinds = ["bar", "line"] + (["histogram"] if histogram else [])
             for kind in kinds:
                 output = destination / f"{safe_name}_{kind}.png"
                 if output.resolve() == source or (output.exists() and output.samefile(source)):
@@ -177,32 +193,34 @@ def visualize_data(csv_file, column=None, output_dir=None, max_points=1000, x_co
         if summary_path is not None:
             protected = [Path(csv_file).expanduser().resolve()]
             if destination is not None:
-                protected += [destination / f"{safe_name}_{kind}.png" for kind in (["bar", "line"] + (["histogram"] if histogram else []))]
+                protected += [destination / f"{safe_name}_{kind}.png" for kind in kinds]
             if any(summary_path == path.resolve() or (summary_path.exists() and path.exists() and summary_path.samefile(path)) for path in protected):
                 raise ValueError("Summary output must differ from source data and chart outputs.")
-        owned_figures.append(plt.figure())
-        series.plot(kind="bar")
-        plt.title(f"Bar Chart of {selected_column}")
-        plt.xlabel(x_column or "Index")
-        plt.ylabel(selected_column)
-        plt.tight_layout()
-        if destination is None:
-            plt.show()
-        else:
-            save_chart_atomic(destination / f"{safe_name}_bar.png")
-            plt.close()
+        if chart_kind in {"bar", "both"}:
+            owned_figures.append(plt.figure())
+            series.plot(kind="bar", **({"logy": True} if log_y else {}))
+            plt.title(f"Bar Chart of {selected_column}")
+            plt.xlabel(x_column or "Index")
+            plt.ylabel(selected_column)
+            plt.tight_layout()
+            if destination is None:
+                plt.show()
+            else:
+                save_chart_atomic(destination / f"{safe_name}_bar.png")
+                plt.close()
 
-        owned_figures.append(plt.figure())
-        series.plot(kind="line")
-        plt.title(f"Line Chart of {selected_column}")
-        plt.xlabel(x_column or "Index")
-        plt.ylabel(selected_column)
-        plt.tight_layout()
-        if destination is None:
-            plt.show()
-        else:
-            save_chart_atomic(destination / f"{safe_name}_line.png")
-            plt.close()
+        if chart_kind in {"line", "both"}:
+            owned_figures.append(plt.figure())
+            series.plot(kind="line", **({"logy": True} if log_y else {}))
+            plt.title(f"Line Chart of {selected_column}")
+            plt.xlabel(x_column or "Index")
+            plt.ylabel(selected_column)
+            plt.tight_layout()
+            if destination is None:
+                plt.show()
+            else:
+                save_chart_atomic(destination / f"{safe_name}_line.png")
+                plt.close()
         if histogram:
             owned_figures.append(plt.figure())
             bin_count = min(100, max(1, int(np.ceil(np.sqrt(len(distribution_values))))))
@@ -256,9 +274,15 @@ def main(argv=None):
     parser.add_argument("--summary-output", help="Atomically save numeric filtering and point-sampling counts as JSON")
     parser.add_argument("--delimiter", choices=(",", ";", "tab", "|"), default=",", help="Input CSV delimiter; exports remain comma-separated")
     parser.add_argument("--sort-x", action="store_true", help="Stably sort explicit X values before sampling and plotting")
+    parser.add_argument("--log-y", action="store_true", help="Use logarithmic Y axes for positive bar/line values; histogram counts stay linear")
+    parser.add_argument("--chart-kind", choices=("bar", "line", "both"), default="both", help="Render only the needed chart types (histogram remains independently opt-in)")
     args = parser.parse_args(argv)
     delimiter = "\t" if args.delimiter == "tab" else args.delimiter
     options = {"histogram": True} if args.histogram else {}
+    if args.chart_kind != "both":
+        options["chart_kind"] = args.chart_kind
+    if args.log_y:
+        options["log_y"] = True
     if args.sort_x:
         options["sort_x"] = True
     if delimiter != ",":
