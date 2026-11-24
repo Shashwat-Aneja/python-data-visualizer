@@ -140,9 +140,11 @@ def save_chart_atomic(destination):
         Path(temporary).unlink(missing_ok=True)
 
 
-def visualize_data(csv_file, column=None, output_dir=None, max_points=1000, x_column=None, histogram=False, summary_output=None, delimiter=",", sort_x=False):
+def visualize_data(csv_file, column=None, output_dir=None, max_points=1000, x_column=None, histogram=False, summary_output=None, delimiter=",", sort_x=False, log_y=False):
     owned_figures = []
     try:
+        if not isinstance(log_y, bool):
+            raise ValueError("log_y must be a boolean.")
         data = _read_csv_input(csv_file, delimiter)
         print(f"Loaded {csv_file} successfully!")
         print("Columns detected:", list(data.columns))
@@ -165,6 +167,8 @@ def visualize_data(csv_file, column=None, output_dir=None, max_points=1000, x_co
             if x_column is None:
                 raise ValueError("Sorting X values requires an explicit x_column.")
             series = series.sort_index(kind="stable")
+        if log_y and (series <= 0).any():
+            raise ValueError("Logarithmic Y axes require strictly positive usable values.")
         usable_rows = len(series)
         distribution_values = series.to_numpy(dtype=float)
         series = limit_plot_points(series, max_points)
@@ -191,7 +195,7 @@ def visualize_data(csv_file, column=None, output_dir=None, max_points=1000, x_co
             if any(summary_path == path.resolve() or (summary_path.exists() and path.exists() and summary_path.samefile(path)) for path in protected):
                 raise ValueError("Summary output must differ from source data and chart outputs.")
         owned_figures.append(plt.figure())
-        series.plot(kind="bar")
+        series.plot(kind="bar", **({"logy": True} if log_y else {}))
         plt.title(f"Bar Chart of {selected_column}")
         plt.xlabel(x_column or "Index")
         plt.ylabel(selected_column)
@@ -203,7 +207,7 @@ def visualize_data(csv_file, column=None, output_dir=None, max_points=1000, x_co
             plt.close()
 
         owned_figures.append(plt.figure())
-        series.plot(kind="line")
+        series.plot(kind="line", **({"logy": True} if log_y else {}))
         plt.title(f"Line Chart of {selected_column}")
         plt.xlabel(x_column or "Index")
         plt.ylabel(selected_column)
@@ -266,9 +270,12 @@ def main(argv=None):
     parser.add_argument("--summary-output", help="Atomically save numeric filtering and point-sampling counts as JSON")
     parser.add_argument("--delimiter", choices=(",", ";", "tab", "|"), default=",", help="Input CSV delimiter; exports remain comma-separated")
     parser.add_argument("--sort-x", action="store_true", help="Stably sort explicit X values before sampling and plotting")
+    parser.add_argument("--log-y", action="store_true", help="Use logarithmic Y axes for positive bar/line values; histogram counts stay linear")
     args = parser.parse_args(argv)
     delimiter = "\t" if args.delimiter == "tab" else args.delimiter
     options = {"histogram": True} if args.histogram else {}
+    if args.log_y:
+        options["log_y"] = True
     if args.sort_x:
         options["sort_x"] = True
     if delimiter != ",":
