@@ -93,3 +93,5 @@ CSV paths ending in `.gz`, `.bz2`, or `.xz` are supported without unpacking a se
 Corrupt compressed bodies, invalid DEFLATE blocks and header-parser limit failures use the normal validation-error path rather than escaping as EOFError, zlib.error or csv.Error. Header inspection restores caller stream position/ownership on these failures. No invalid input is exported.
 
 `--x-column date --parse-x-dates --sort-x` parses selected labels as timestamps normalized to UTC, then sorts chronologically with stable ties. Numeric epoch offsets and invalid labels are rejected explicitly. Without this option, X labels retain their original behavior.
+
+`--summary-stats --summary-output summary.json` adds minimum, maximum, overflow-safe mean and median over every usable finite observation before plot-point sampling. Existing count-only summaries remain the default. Even medians and means remain finite for large representable values.

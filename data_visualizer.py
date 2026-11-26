@@ -7,6 +7,8 @@ from numbers import Number
 import csv
 import argparse
 import json
+import math
+from fractions import Fraction
 import re
 import os
 import tempfile
@@ -144,9 +146,11 @@ def save_chart_atomic(destination):
         Path(temporary).unlink(missing_ok=True)
 
 
-def visualize_data(csv_file, column=None, output_dir=None, max_points=1000, x_column=None, histogram=False, summary_output=None, delimiter=",", sort_x=False, log_y=False, chart_kind="both", parse_x_dates=False):
+def visualize_data(csv_file, column=None, output_dir=None, max_points=1000, x_column=None, histogram=False, summary_output=None, delimiter=",", sort_x=False, log_y=False, chart_kind="both", parse_x_dates=False, summary_stats=False):
     owned_figures = []
     try:
+        if not isinstance(summary_stats, bool) or (summary_stats and summary_output is None):
+            raise ValueError("summary_stats requires a summary_output destination and a boolean.")
         if not isinstance(parse_x_dates, bool) or (parse_x_dates and x_column is None):
             raise ValueError("parse_x_dates requires an explicit x_column and a boolean.")
         if not isinstance(chart_kind, str) or chart_kind not in {"bar", "line", "both"}:
@@ -247,7 +251,10 @@ def visualize_data(csv_file, column=None, output_dir=None, max_points=1000, x_co
                 save_chart_atomic(destination / f"{safe_name}_histogram.png")
                 plt.close()
         if summary_path is not None:
-            write_chart_summary({"column": selected_column, "input_rows": len(data), "usable_rows": usable_rows, "dropped_rows": len(data) - usable_rows, "plotted_rows": len(series), "histogram_rows": usable_rows if histogram else 0}, summary_path)
+            payload = {"column": selected_column, "input_rows": len(data), "usable_rows": usable_rows, "dropped_rows": len(data) - usable_rows, "plotted_rows": len(series), "histogram_rows": usable_rows if histogram else 0}
+            if summary_stats:
+                payload["statistics"] = numeric_statistics(distribution_values)
+            write_chart_summary(payload, summary_path)
         return 0
     except (OSError, pd.errors.ParserError, ValueError) as exc:
         print(f"Error processing file: {exc}")
@@ -255,6 +262,23 @@ def visualize_data(csv_file, column=None, output_dir=None, max_points=1000, x_co
     finally:
         for figure in owned_figures:
             plt.close(figure)
+
+
+def numeric_statistics(values):
+    values = np.asarray(values, dtype=float)
+    if not values.size or not np.isfinite(values).all():
+        raise ValueError("Statistics require non-empty finite observations.")
+    def mean(numbers):
+        try:
+            return math.fsum(float(value) for value in numbers) / len(numbers)
+        except OverflowError:
+            # Preserve cancellation and tiny residuals before rounding the mean.
+            total = sum((Fraction.from_float(float(value)) for value in numbers), Fraction())
+            return float(total / len(numbers))
+    ordered = np.sort(values)
+    middle = len(ordered) // 2
+    median = float(ordered[middle]) if len(ordered) % 2 else mean(ordered[middle - 1:middle + 1])
+    return {"minimum": float(ordered[0]), "maximum": float(ordered[-1]), "mean": mean(values), "median": median}
 
 
 def write_chart_summary(payload, destination):
@@ -289,9 +313,12 @@ def main(argv=None):
     parser.add_argument("--log-y", action="store_true", help="Use logarithmic Y axes for positive bar/line values; histogram counts stay linear")
     parser.add_argument("--chart-kind", choices=("bar", "line", "both"), default="both", help="Render only the needed chart types (histogram remains independently opt-in)")
     parser.add_argument("--parse-x-dates", action="store_true", help="Parse explicit X labels as UTC timestamps before optional chronological sorting")
+    parser.add_argument("--summary-stats", action="store_true", help="Include full finite-data extrema, mean and median in --summary-output")
     args = parser.parse_args(argv)
     delimiter = "\t" if args.delimiter == "tab" else args.delimiter
     options = {"histogram": True} if args.histogram else {}
+    if args.summary_stats:
+        options["summary_stats"] = True
     if args.parse_x_dates:
         options["parse_x_dates"] = True
     if args.chart_kind != "both":
