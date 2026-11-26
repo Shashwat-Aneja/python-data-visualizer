@@ -89,3 +89,5 @@ CSV paths ending in `.gz`, `.bz2`, or `.xz` are supported without unpacking a se
 `--log-y` renders bar and line Y axes logarithmically for strictly positive usable observations. Zero/negative values fail before chart output; they are not silently dropped to make the axis work. Histogram frequency axes remain linear.
 
 `--chart-kind bar|line|both` selects the charts actually rendered, avoiding unnecessary rendering and file replacement. The default is both; `--histogram` is independent. Only requested chart destinations participate in collision checks.
+
+Corrupt compressed bodies, invalid DEFLATE blocks and header-parser limit failures use the normal validation-error path rather than escaping as EOFError, zlib.error or csv.Error. Header inspection restores caller stream position/ownership on these failures. No invalid input is exported.
