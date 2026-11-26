@@ -95,3 +95,5 @@ Corrupt compressed bodies, invalid DEFLATE blocks and header-parser limit failur
 `--x-column date --parse-x-dates --sort-x` parses selected labels as timestamps normalized to UTC, then sorts chronologically with stable ties. Numeric epoch offsets and invalid labels are rejected explicitly. Without this option, X labels retain their original behavior.
 
 `--summary-stats --summary-output summary.json` adds minimum, maximum, overflow-safe mean and median over every usable finite observation before plot-point sampling. Existing count-only summaries remain the default. Even medians and means remain finite for large representable values.
+
+`--chart-kind histogram` renders only the full finite distribution, with no unnecessary bar/line rendering or point sampling. Its summary reports zero sampled plotted_rows and the full histogram_rows. X labels/sorting and logarithmic Y options are rejected as inapplicable in histogram-only mode.

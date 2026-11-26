@@ -153,9 +153,13 @@ def visualize_data(csv_file, column=None, output_dir=None, max_points=1000, x_co
             raise ValueError("summary_stats requires a summary_output destination and a boolean.")
         if not isinstance(parse_x_dates, bool) or (parse_x_dates and x_column is None):
             raise ValueError("parse_x_dates requires an explicit x_column and a boolean.")
-        if not isinstance(chart_kind, str) or chart_kind not in {"bar", "line", "both"}:
-            raise ValueError("chart_kind must be bar, line, or both.")
-        kinds = (["bar", "line"] if chart_kind == "both" else [chart_kind]) + (["histogram"] if histogram else [])
+        if not isinstance(chart_kind, str) or chart_kind not in {"bar", "line", "both", "histogram"}:
+            raise ValueError("chart_kind must be bar, line, both, or histogram.")
+        if chart_kind == "histogram":
+            if x_column is not None or sort_x or log_y:
+                raise ValueError("Histogram-only charts do not use X labels, X sorting, or logarithmic Y axes.")
+            histogram = True
+        kinds = ["histogram"] if chart_kind == "histogram" else (["bar", "line"] if chart_kind == "both" else [chart_kind]) + (["histogram"] if histogram else [])
         if not isinstance(log_y, bool):
             raise ValueError("log_y must be a boolean.")
         data = _read_csv_input(csv_file, delimiter)
@@ -190,7 +194,8 @@ def visualize_data(csv_file, column=None, output_dir=None, max_points=1000, x_co
             raise ValueError("Logarithmic Y axes require strictly positive usable values.")
         usable_rows = len(series)
         distribution_values = series.to_numpy(dtype=float)
-        series = limit_plot_points(series, max_points)
+        if chart_kind != "histogram":
+            series = limit_plot_points(series, max_points)
         print(f"📊 Visualizing column: {selected_column} ({len(series)} usable rows)")
 
         destination = None
@@ -251,7 +256,7 @@ def visualize_data(csv_file, column=None, output_dir=None, max_points=1000, x_co
                 save_chart_atomic(destination / f"{safe_name}_histogram.png")
                 plt.close()
         if summary_path is not None:
-            payload = {"column": selected_column, "input_rows": len(data), "usable_rows": usable_rows, "dropped_rows": len(data) - usable_rows, "plotted_rows": len(series), "histogram_rows": usable_rows if histogram else 0}
+            payload = {"column": selected_column, "input_rows": len(data), "usable_rows": usable_rows, "dropped_rows": len(data) - usable_rows, "plotted_rows": 0 if chart_kind == "histogram" else len(series), "histogram_rows": usable_rows if histogram else 0}
             if summary_stats:
                 payload["statistics"] = numeric_statistics(distribution_values)
             write_chart_summary(payload, summary_path)
@@ -311,7 +316,7 @@ def main(argv=None):
     parser.add_argument("--delimiter", choices=(",", ";", "tab", "|"), default=",", help="Input CSV delimiter; exports remain comma-separated")
     parser.add_argument("--sort-x", action="store_true", help="Stably sort explicit X values before sampling and plotting")
     parser.add_argument("--log-y", action="store_true", help="Use logarithmic Y axes for positive bar/line values; histogram counts stay linear")
-    parser.add_argument("--chart-kind", choices=("bar", "line", "both"), default="both", help="Render only the needed chart types (histogram remains independently opt-in)")
+    parser.add_argument("--chart-kind", choices=("bar", "line", "both", "histogram"), default="both", help="Render only the needed chart types (histogram remains independently opt-in)")
     parser.add_argument("--parse-x-dates", action="store_true", help="Parse explicit X labels as UTC timestamps before optional chronological sorting")
     parser.add_argument("--summary-stats", action="store_true", help="Include full finite-data extrema, mean and median in --summary-output")
     args = parser.parse_args(argv)
