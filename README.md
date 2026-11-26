@@ -91,3 +91,5 @@ CSV paths ending in `.gz`, `.bz2`, or `.xz` are supported without unpacking a se
 `--chart-kind bar|line|both` selects the charts actually rendered, avoiding unnecessary rendering and file replacement. The default is both; `--histogram` is independent. Only requested chart destinations participate in collision checks.
 
 Corrupt compressed bodies, invalid DEFLATE blocks and header-parser limit failures use the normal validation-error path rather than escaping as EOFError, zlib.error or csv.Error. Header inspection restores caller stream position/ownership on these failures. No invalid input is exported.
+
+`--x-column date --parse-x-dates --sort-x` parses selected labels as timestamps normalized to UTC, then sorts chronologically with stable ties. Numeric epoch offsets and invalid labels are rejected explicitly. Without this option, X labels retain their original behavior.

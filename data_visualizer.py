@@ -3,6 +3,7 @@ import gzip
 import bz2
 import lzma
 import io
+from numbers import Number
 import csv
 import argparse
 import json
@@ -143,9 +144,11 @@ def save_chart_atomic(destination):
         Path(temporary).unlink(missing_ok=True)
 
 
-def visualize_data(csv_file, column=None, output_dir=None, max_points=1000, x_column=None, histogram=False, summary_output=None, delimiter=",", sort_x=False, log_y=False, chart_kind="both"):
+def visualize_data(csv_file, column=None, output_dir=None, max_points=1000, x_column=None, histogram=False, summary_output=None, delimiter=",", sort_x=False, log_y=False, chart_kind="both", parse_x_dates=False):
     owned_figures = []
     try:
+        if not isinstance(parse_x_dates, bool) or (parse_x_dates and x_column is None):
+            raise ValueError("parse_x_dates requires an explicit x_column and a boolean.")
         if not isinstance(chart_kind, str) or chart_kind not in {"bar", "line", "both"}:
             raise ValueError("chart_kind must be bar, line, or both.")
         kinds = (["bar", "line"] if chart_kind == "both" else [chart_kind]) + (["histogram"] if histogram else [])
@@ -167,6 +170,12 @@ def visualize_data(csv_file, column=None, output_dir=None, max_points=1000, x_co
             labels = data.loc[series.index, x_column]
             if labels.isna().any():
                 raise ValueError("X column contains missing labels for plotted rows.")
+            if parse_x_dates:
+                if labels.map(lambda value: isinstance(value, Number)).any():
+                    raise ValueError("Date X labels must be calendar timestamps, not numeric epoch offsets.")
+                labels = labels.map(lambda value: pd.to_datetime(value, errors="coerce", utc=True))
+                if labels.isna().any():
+                    raise ValueError("Date X labels must contain valid calendar timestamps.")
             series = series.copy()
             series.index = pd.Index(labels, name=x_column)
         if sort_x:
@@ -279,9 +288,12 @@ def main(argv=None):
     parser.add_argument("--sort-x", action="store_true", help="Stably sort explicit X values before sampling and plotting")
     parser.add_argument("--log-y", action="store_true", help="Use logarithmic Y axes for positive bar/line values; histogram counts stay linear")
     parser.add_argument("--chart-kind", choices=("bar", "line", "both"), default="both", help="Render only the needed chart types (histogram remains independently opt-in)")
+    parser.add_argument("--parse-x-dates", action="store_true", help="Parse explicit X labels as UTC timestamps before optional chronological sorting")
     args = parser.parse_args(argv)
     delimiter = "\t" if args.delimiter == "tab" else args.delimiter
     options = {"histogram": True} if args.histogram else {}
+    if args.parse_x_dates:
+        options["parse_x_dates"] = True
     if args.chart_kind != "both":
         options["chart_kind"] = args.chart_kind
     if args.log_y:
