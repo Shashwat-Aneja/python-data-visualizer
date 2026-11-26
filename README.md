@@ -89,3 +89,11 @@ CSV paths ending in `.gz`, `.bz2`, or `.xz` are supported without unpacking a se
 `--log-y` renders bar and line Y axes logarithmically for strictly positive usable observations. Zero/negative values fail before chart output; they are not silently dropped to make the axis work. Histogram frequency axes remain linear.
 
 `--chart-kind bar|line|both` selects the charts actually rendered, avoiding unnecessary rendering and file replacement. The default is both; `--histogram` is independent. Only requested chart destinations participate in collision checks.
+
+Corrupt compressed bodies, invalid DEFLATE blocks and header-parser limit failures use the normal validation-error path rather than escaping as EOFError, zlib.error or csv.Error. Header inspection restores caller stream position/ownership on these failures. No invalid input is exported.
+
+`--x-column date --parse-x-dates --sort-x` parses selected labels as timestamps normalized to UTC, then sorts chronologically with stable ties. Numeric epoch offsets and invalid labels are rejected explicitly. Without this option, X labels retain their original behavior.
+
+`--summary-stats --summary-output summary.json` adds minimum, maximum, overflow-safe mean and median over every usable finite observation before plot-point sampling. Existing count-only summaries remain the default. Even medians and means remain finite for large representable values.
+
+`--chart-kind histogram` renders only the full finite distribution, with no unnecessary bar/line rendering or point sampling. Its summary reports zero sampled plotted_rows and the full histogram_rows. X labels/sorting and logarithmic Y options are rejected as inapplicable in histogram-only mode.
