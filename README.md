@@ -107,3 +107,5 @@ Use `--max-input-rows 100000` to reject an input file with more than that many d
 `--data-output plotted.csv` atomically exports the actual aggregated/sampled bar/line series as `x,value`; histogram-only mode exports all usable observations. Output aliases against source, summary or requested PNGs are rejected before chart writes. Each artifact is atomic individually; the set of outputs is not a single transaction.
 
 `--encoding utf-8|utf-8-sig|cp1252|latin-1` explicitly selects CSV input decoding, including compressed files and binary streams. Header validation and data parsing use the same encoding; comparison/training/scoring inputs share it. The default remains UTF-8, and export encoding is unchanged. Text streams are already decoded by their caller.
+
+`--max-input-bytes N` snapshots each decompressed CSV input into a bounded byte buffer before parsing (1..64 MiB). Oversized input fails; gzip/bzip2/xz limits apply after decompression. Caller-owned seekable streams retain position and ownership. Text stream bytes use the selected encoding. This optional mode requires local regular files or seekable streams and composes with the raw row budget.
