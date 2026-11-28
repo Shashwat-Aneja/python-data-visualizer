@@ -175,7 +175,7 @@ def _aliases_source(destination, source):
     return False
 
 
-def visualize_data(csv_file, column=None, output_dir=None, max_points=1000, x_column=None, histogram=False, summary_output=None, delimiter=",", sort_x=False, log_y=False, chart_kind="both", parse_x_dates=False, summary_stats=False, max_rows=None, aggregate_x=None):
+def visualize_data(csv_file, column=None, output_dir=None, max_points=1000, x_column=None, histogram=False, summary_output=None, delimiter=",", sort_x=False, log_y=False, chart_kind="both", parse_x_dates=False, summary_stats=False, max_rows=None, aggregate_x=None, data_output=None):
     owned_figures = []
     try:
         if aggregate_x is not None and (aggregate_x not in ("sum", "mean") or x_column is None or chart_kind == "histogram"):
@@ -266,6 +266,27 @@ def visualize_data(csv_file, column=None, output_dir=None, max_points=1000, x_co
                 protected += [destination / f"{safe_name}_{kind}.png" for kind in kinds]
             if _aliases_source(summary_path, csv_file) or any(summary_path == path.resolve() or (summary_path.exists() and path.exists() and summary_path.samefile(path)) for path in protected):
                 raise ValueError("Summary output must differ from source data and chart outputs.")
+        data_path = Path(data_output).expanduser().resolve() if data_output is not None else None
+        if data_path is not None:
+            protected = []
+            if summary_path is not None:
+                protected.append(summary_path)
+            if destination is not None:
+                protected += [destination / f"{safe_name}_{kind}.png" for kind in kinds]
+            if _aliases_source(data_path, csv_file) or any(data_path == path.resolve() or (data_path.exists() and path.exists() and data_path.samefile(path)) for path in protected):
+                raise ValueError("Data output must differ from the source, summary and chart outputs.")
+            data_path.parent.mkdir(parents=True, exist_ok=True)
+            temporary = None
+            try:
+                with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", newline="", dir=data_path.parent, delete=False) as handle:
+                    temporary = Path(handle.name)
+                    pd.DataFrame({"x": series.index, "value": series.to_numpy()}).to_csv(handle, index=False)
+                    handle.flush()
+                    os.fsync(handle.fileno())
+                os.replace(temporary, data_path)
+            finally:
+                if temporary is not None:
+                    temporary.unlink(missing_ok=True)
         if chart_kind in {"bar", "both"}:
             owned_figures.append(plt.figure())
             series.plot(kind="bar", **({"logy": True} if log_y else {}))
@@ -372,6 +393,7 @@ def main(argv=None):
     parser.add_argument("--summary-stats", action="store_true", help="Include full finite-data extrema, mean and median in --summary-output")
     parser.add_argument("--max-input-rows", type=int, help="Reject CSV files exceeding this raw row budget (1..10000000)")
     parser.add_argument("--aggregate-x", choices=("sum", "mean"), help="Aggregate repeated X labels before point sampling")
+    parser.add_argument("--data-output", help="Atomically export the actual chart series as x,value CSV")
     args = parser.parse_args(argv)
     if args.max_input_rows is not None and not 1 <= args.max_input_rows <= 10_000_000:
         parser.error("--max-input-rows must be from 1 to 10000000")
@@ -387,6 +409,8 @@ def main(argv=None):
         options["log_y"] = True
     if args.sort_x:
         options["sort_x"] = True
+    if args.data_output is not None:
+        options["data_output"] = args.data_output
     if args.aggregate_x is not None:
         options["aggregate_x"] = args.aggregate_x
     if args.max_input_rows is not None:
