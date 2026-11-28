@@ -97,3 +97,7 @@ Corrupt compressed bodies, invalid DEFLATE blocks and header-parser limit failur
 `--summary-stats --summary-output summary.json` adds minimum, maximum, overflow-safe mean and median over every usable finite observation before plot-point sampling. Existing count-only summaries remain the default. Even medians and means remain finite for large representable values.
 
 `--chart-kind histogram` renders only the full finite distribution, with no unnecessary bar/line rendering or point sampling. Its summary reports zero sampled plotted_rows and the full histogram_rows. X labels/sorting and logarithmic Y options are rejected as inapplicable in histogram-only mode.
+
+### Optional raw CSV row budget
+
+Use `--max-input-rows 100000` to reject an input file with more than that many data rows before modeling or export. The budget is per file, including comparison/training/scoring inputs, and applies before filtering or aggregation. The default remains unlimited. Values must be integers from 1 to 10,000,000. Only the budget plus one rows are loaded; oversized inputs fail rather than being silently truncated. This is a row limit, not a byte or field-size limit. Python callers can use `max_rows=`.

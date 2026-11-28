@@ -19,14 +19,22 @@ import numpy as np
 import pandas as pd
 
 
-def _read_csv_input(csv_file, delimiter=",", **options):
+def _read_csv_input(csv_file, delimiter=",", max_rows=None, **options):
+    if max_rows is not None and (isinstance(max_rows, bool) or not isinstance(max_rows, int) or not 1 <= max_rows <= 10_000_000):
+        raise ValueError("max_rows must be an integer from 1 to 10000000.")
     if delimiter not in (",", ";", "\t", "|"):
         raise ValueError("Unsupported input delimiter.")
+    if max_rows is not None:
+        if "nrows" in options:
+            raise ValueError("Do not combine nrows and max_rows.")
+        options["nrows"] = max_rows + 1
     _reject_duplicate_headers(csv_file, delimiter)
     try:
         frame = pd.read_csv(csv_file, **options, **({"sep": delimiter} if delimiter != "," else {}))
     except (EOFError, lzma.LZMAError, zlib.error, csv.Error) as exc:
         raise ValueError("CSV input is corrupt or incomplete, or its header exceeds parser limits.") from exc
+    if max_rows is not None and len(frame) > max_rows:
+        raise ValueError("CSV input exceeds the configured row limit.")
     return frame
 
 
@@ -146,7 +154,28 @@ def save_chart_atomic(destination):
         Path(temporary).unlink(missing_ok=True)
 
 
-def visualize_data(csv_file, column=None, output_dir=None, max_points=1000, x_column=None, histogram=False, summary_output=None, delimiter=",", sort_x=False, log_y=False, chart_kind="both", parse_x_dates=False, summary_stats=False):
+def _source_path(source):
+    if isinstance(source, (str, os.PathLike)):
+        return Path(source).expanduser().resolve()
+    name = getattr(source, "name", None)
+    return Path(name).expanduser().resolve() if isinstance(name, (str, os.PathLike)) else None
+
+
+def _aliases_source(destination, source):
+    path = _source_path(source)
+    if path is not None and (destination.resolve() == path or (destination.exists() and path.exists() and destination.samefile(path))):
+        return True
+    if destination.exists() and hasattr(source, "fileno"):
+        try:
+            source_stat = os.fstat(source.fileno())
+        except (OSError, ValueError):
+            return False
+        target_stat = destination.stat()
+        return (source_stat.st_dev, source_stat.st_ino) == (target_stat.st_dev, target_stat.st_ino)
+    return False
+
+
+def visualize_data(csv_file, column=None, output_dir=None, max_points=1000, x_column=None, histogram=False, summary_output=None, delimiter=",", sort_x=False, log_y=False, chart_kind="both", parse_x_dates=False, summary_stats=False, max_rows=None):
     owned_figures = []
     try:
         if not isinstance(summary_stats, bool) or (summary_stats and summary_output is None):
@@ -162,7 +191,7 @@ def visualize_data(csv_file, column=None, output_dir=None, max_points=1000, x_co
         kinds = ["histogram"] if chart_kind == "histogram" else (["bar", "line"] if chart_kind == "both" else [chart_kind]) + (["histogram"] if histogram else [])
         if not isinstance(log_y, bool):
             raise ValueError("log_y must be a boolean.")
-        data = _read_csv_input(csv_file, delimiter)
+        data = _read_csv_input(csv_file, delimiter, **({"max_rows": max_rows} if max_rows is not None else {}))
         print(f"Loaded {csv_file} successfully!")
         print("Columns detected:", list(data.columns))
 
@@ -204,18 +233,17 @@ def visualize_data(csv_file, column=None, output_dir=None, max_points=1000, x_co
             destination = Path(output_dir).expanduser()
             destination.mkdir(parents=True, exist_ok=True)
             safe_name = re.sub(r"[^A-Za-z0-9_-]+", "_", selected_column).strip("_") or "metric"
-            source = Path(csv_file).expanduser().resolve()
             for kind in kinds:
                 output = destination / f"{safe_name}_{kind}.png"
-                if output.resolve() == source or (output.exists() and output.samefile(source)):
+                if _aliases_source(output, csv_file):
                     raise ValueError("Chart outputs must not overwrite the source data file.")
 
         summary_path = Path(summary_output).expanduser().resolve() if summary_output is not None else None
         if summary_path is not None:
-            protected = [Path(csv_file).expanduser().resolve()]
+            protected = []
             if destination is not None:
                 protected += [destination / f"{safe_name}_{kind}.png" for kind in kinds]
-            if any(summary_path == path.resolve() or (summary_path.exists() and path.exists() and summary_path.samefile(path)) for path in protected):
+            if _aliases_source(summary_path, csv_file) or any(summary_path == path.resolve() or (summary_path.exists() and path.exists() and summary_path.samefile(path)) for path in protected):
                 raise ValueError("Summary output must differ from source data and chart outputs.")
         if chart_kind in {"bar", "both"}:
             owned_figures.append(plt.figure())
@@ -319,7 +347,10 @@ def main(argv=None):
     parser.add_argument("--chart-kind", choices=("bar", "line", "both", "histogram"), default="both", help="Render only the needed chart types (histogram remains independently opt-in)")
     parser.add_argument("--parse-x-dates", action="store_true", help="Parse explicit X labels as UTC timestamps before optional chronological sorting")
     parser.add_argument("--summary-stats", action="store_true", help="Include full finite-data extrema, mean and median in --summary-output")
+    parser.add_argument("--max-input-rows", type=int, help="Reject CSV files exceeding this raw row budget (1..10000000)")
     args = parser.parse_args(argv)
+    if args.max_input_rows is not None and not 1 <= args.max_input_rows <= 10_000_000:
+        parser.error("--max-input-rows must be from 1 to 10000000")
     delimiter = "\t" if args.delimiter == "tab" else args.delimiter
     options = {"histogram": True} if args.histogram else {}
     if args.summary_stats:
@@ -332,6 +363,8 @@ def main(argv=None):
         options["log_y"] = True
     if args.sort_x:
         options["sort_x"] = True
+    if args.max_input_rows is not None:
+        options["max_rows"] = args.max_input_rows
     if delimiter != ",":
         options["delimiter"] = delimiter
     if args.summary_output:
