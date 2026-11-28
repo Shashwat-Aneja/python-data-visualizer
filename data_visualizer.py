@@ -175,9 +175,11 @@ def _aliases_source(destination, source):
     return False
 
 
-def visualize_data(csv_file, column=None, output_dir=None, max_points=1000, x_column=None, histogram=False, summary_output=None, delimiter=",", sort_x=False, log_y=False, chart_kind="both", parse_x_dates=False, summary_stats=False, max_rows=None):
+def visualize_data(csv_file, column=None, output_dir=None, max_points=1000, x_column=None, histogram=False, summary_output=None, delimiter=",", sort_x=False, log_y=False, chart_kind="both", parse_x_dates=False, summary_stats=False, max_rows=None, aggregate_x=None):
     owned_figures = []
     try:
+        if aggregate_x is not None and (aggregate_x not in ("sum", "mean") or x_column is None or chart_kind == "histogram"):
+            raise ValueError("aggregate_x requires an X column, a sum/mean policy and a bar or line chart.")
         if not isinstance(summary_stats, bool) or (summary_stats and summary_output is None):
             raise ValueError("summary_stats requires a summary_output destination and a boolean.")
         if not isinstance(parse_x_dates, bool) or (parse_x_dates and x_column is None):
@@ -223,6 +225,25 @@ def visualize_data(csv_file, column=None, output_dir=None, max_points=1000, x_co
             raise ValueError("Logarithmic Y axes require strictly positive usable values.")
         usable_rows = len(series)
         distribution_values = series.to_numpy(dtype=float)
+        aggregated_points = None
+        if aggregate_x is not None:
+            from fractions import Fraction
+            def aggregate(values):
+                numbers = [float(value) for value in values]
+                try:
+                    value = math.fsum(numbers)
+                    if aggregate_x == "mean":
+                        value /= len(numbers)
+                except OverflowError:
+                    exact = sum((Fraction.from_float(value) for value in numbers), Fraction())
+                    value = float(exact / len(numbers) if aggregate_x == "mean" else exact)
+                if not math.isfinite(value):
+                    raise ValueError("Aggregated chart values exceed the supported numeric range.")
+                return value
+            series = series.groupby(level=0, sort=False).agg(aggregate)
+            aggregated_points = len(series)
+            if log_y and (series <= 0).any():
+                raise ValueError("Logarithmic Y axes require positive aggregated values.")
         if chart_kind != "histogram":
             series = limit_plot_points(series, max_points)
         print(f"📊 Visualizing column: {selected_column} ({len(series)} usable rows)")
@@ -285,11 +306,13 @@ def visualize_data(csv_file, column=None, output_dir=None, max_points=1000, x_co
                 plt.close()
         if summary_path is not None:
             payload = {"column": selected_column, "input_rows": len(data), "usable_rows": usable_rows, "dropped_rows": len(data) - usable_rows, "plotted_rows": 0 if chart_kind == "histogram" else len(series), "histogram_rows": usable_rows if histogram else 0}
+            if aggregate_x is not None:
+                payload.update(aggregation=aggregate_x, aggregated_points=aggregated_points)
             if summary_stats:
                 payload["statistics"] = numeric_statistics(distribution_values)
             write_chart_summary(payload, summary_path)
         return 0
-    except (OSError, pd.errors.ParserError, ValueError) as exc:
+    except (OSError, pd.errors.ParserError, ValueError, OverflowError) as exc:
         print(f"Error processing file: {exc}")
         return 1
     finally:
@@ -348,6 +371,7 @@ def main(argv=None):
     parser.add_argument("--parse-x-dates", action="store_true", help="Parse explicit X labels as UTC timestamps before optional chronological sorting")
     parser.add_argument("--summary-stats", action="store_true", help="Include full finite-data extrema, mean and median in --summary-output")
     parser.add_argument("--max-input-rows", type=int, help="Reject CSV files exceeding this raw row budget (1..10000000)")
+    parser.add_argument("--aggregate-x", choices=("sum", "mean"), help="Aggregate repeated X labels before point sampling")
     args = parser.parse_args(argv)
     if args.max_input_rows is not None and not 1 <= args.max_input_rows <= 10_000_000:
         parser.error("--max-input-rows must be from 1 to 10000000")
@@ -363,6 +387,8 @@ def main(argv=None):
         options["log_y"] = True
     if args.sort_x:
         options["sort_x"] = True
+    if args.aggregate_x is not None:
+        options["aggregate_x"] = args.aggregate_x
     if args.max_input_rows is not None:
         options["max_rows"] = args.max_input_rows
     if delimiter != ",":
